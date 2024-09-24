@@ -5,39 +5,70 @@ import java.math.BigInteger;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.io.FileOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import java.io.ByteArrayOutputStream;
 public class Git
 {
     public static void main (String [] args)
     {
         initializesGitRepo();
-        //should get already exists
-        initializesGitRepo();
-
-        checkForAndDelete(gitDirectory);
-
-        initializesGitRepo();
-
+        System.out.println("Git Repository Initialized");
         Git git = new Git();
-        try
+        hash = null;
+        try 
         {
-            git.putFileToObjectsFolder();
+            hash = git.putFileToObjectsFolder();
+            System.out.println("File added to objects folder " + hash);
         } 
-        catch (IOException e)
+        catch (IOException e) 
         {
             e.printStackTrace();
         }
-        try
+        if (hash != null)
         {
+            File objectFile = new File ("git/objects/" + hash);
+            if (objectFile.exists())
+            {
+                System.out.println("File added to the  objects folder");
+            }
+            else
+            {
+                System.out.println("File not found in the objects folder");
+            }
+        }
+        try {
             git.putFileToIndex(hash, "plainTextFile.txt");
+            System.out.println("File added to the index");
         } 
-        catch (IOException e)
+        catch (IOException e) 
         {
             e.printStackTrace();
         }
-        
+        File index = new File ("git/index");
+        try 
+        {
+            String insideIndex = new String (Files.readAllBytes(index.toPath()));
+            if (insideIndex.contains (hash + " plainTextFile.txt"))
+            {
+                System.out.println("File added to the index");
+            }
+            else
+            {
+                System.out.println("File not found in the index");
+            }
+        } 
+        catch (IOException e) 
+        {
+            e.printStackTrace();
+        }
+        checkForAndDelete(gitDirectory);
+        System.out.println ("Deleted");
     }
     private static File gitDirectory = new File("git");
     private static String hash;
+    private static boolean compression = true;
     public static void initializesGitRepo ()
     {
         //create gitDirectory
@@ -121,28 +152,42 @@ public class Git
             throw new RuntimeException(e);
         }
     }
-
-    public void putFileToObjectsFolder()throws IOException
+    
+    public String putFileToObjectsFolder()throws IOException
     {
         File regularFile = new File ("plainTextFile.txt");
-        try (FileWriter writer2 = new FileWriter (regularFile)){
+        try (FileWriter writer2 = new FileWriter (regularFile))
+        {
             writer2.write("top secret data");
+        }
+        byte[] fileContentInBytes = Files.readAllBytes(regularFile.toPath());
+        byte [] hashData = null;
+        if (compression)
+        {
+            hashData = zipBytes(regularFile.getName(), fileContentInBytes);
+        }
+        else
+        {
+            hashData = fileContentInBytes;
         }
         //reads the contents of the file into the byte array and then  we can generate the hash by using our encryptString method
         String fileContent = new String (Files.readAllBytes(regularFile.toPath()));
-        hash = encryptThisString(fileContent);
+        hash = encryptThisString(new String (hashData));
         File objects = new File ("git/objects");
         if (!objects.exists())
         {
             objects.mkdir();
         }
         File objectFile = new File ("git/objects/" + hash);
-        try (FileWriter writer = new FileWriter (objectFile))
+        //Writes out bytes better
+        try (FileOutputStream writer = new FileOutputStream (objectFile))
         {
-            writer.write(fileContent);
+            writer.write(hashData);
 
         }
+        return hash;
     }
+
     public void putFileToIndex(String hash, String filename)throws IOException
     {
         File index = new File ("git/index");
@@ -152,6 +197,18 @@ public class Git
             writer.write(hash + " " + filename + "\n");
         }
         
+    }
+
+    public static byte[] zipBytes(String filename, byte[] input) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ZipOutputStream zos = new ZipOutputStream(baos);
+        ZipEntry entry = new ZipEntry(filename);
+        entry.setSize(input.length);
+        zos.putNextEntry(entry);
+        zos.write(input);
+        zos.closeEntry();
+        zos.close();
+        return baos.toByteArray();
     }
 }  
 
